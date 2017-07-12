@@ -20,7 +20,6 @@
   :components ((:file "package")
 	       (:file "math")
 	       (:file "utils")
-	       (:file "channels")
 	       (:file "shaders")
 	       (:file "environment")
 	       (:file "pen")

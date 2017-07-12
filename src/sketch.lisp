@@ -2,8 +2,6 @@
 
 (in-package #:sketch)
 
-;;; "sketch" goes here. Hacks and glory await!
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                                                  ;;;
@@ -206,30 +204,6 @@ used for drawing, 60fps.")
      :initarg ,(alexandria:make-keyword (car binding))
      :accessor ,(binding-accessor sketch binding)))
 
-;;; DEFSKETCH channels
-
-(defun channel-binding-p (binding)
-  (and (consp (cadr binding)) (eql 'in (caadr binding))))
-
-(defun make-channel-observer (sketch binding)
-  `(define-channel-observer
-     (let ((win (kit.sdl2:last-window)))
-       (when win
-         (setf (,(binding-accessor sketch binding) win) ,(cadr binding))))))
-
-(defun make-channel-observers (sketch bindings)
-  (mapcar (lambda (binding)
-            (when (channel-binding-p binding)
-              (make-channel-observer sketch binding)))
-          bindings))
-
-(defun replace-channels-with-values (bindings)
-  (loop for binding in bindings
-     collect (list (car binding)
-                   (if (channel-binding-p binding)
-                       (caddr (cadr binding))
-                       (cadr binding)))))
-
 ;;; DEFSKETCH bindings
 
 (defun sketch-bindings-to-slots (sketch bindings)
@@ -266,8 +240,6 @@ used for drawing, 60fps.")
          (defclass ,sketch-name (sketch)
            ,(sketch-bindings-to-slots `,sketch-name bindings)))
 
-       ,@(remove-if-not #'identity (make-channel-observers sketch-name bindings))
-
        (defmethod prepare progn ((instance ,sketch-name) &rest initargs &key &allow-other-keys)
                   (declare (ignorable initargs))
                   (let* (,@(loop for (slot . nil) in *default-slots*
@@ -279,8 +251,7 @@ used for drawing, 60fps.")
                                                       `(if (getf initargs ,(alexandria:make-keyword name))
                                                            (slot-value instance ',name)
                                                            ,value)
-                                                      `(or (getf initargs ,(alexandria:make-keyword name)) ,value)))))
-                                   (replace-channels-with-values bindings)))
+                                                      `(or (getf initargs ,(alexandria:make-keyword name)) ,value)))))))
                     (declare (ignorable ,@(mapcar #'car *default-slots*)))
                     ,(make-window-parameter-setf)
                     ,(make-custom-slots-setf sketch-name (custom-bindings bindings)))
