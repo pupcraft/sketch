@@ -176,9 +176,6 @@ used for drawing, 60fps.")
 
 ;;; DEFSKETCH helpers
 
-(defun first-two (list)
-  (list (first list) (second list)))
-
 (defun default-slot-p (slot-or-binding)
   (let ((defaults (mapcar #'car *default-slots*)))
     (typecase slot-or-binding
@@ -246,12 +243,13 @@ used for drawing, 60fps.")
                               collect (list slot `(slot-value instance ',slot)))
                          ,@(mapcar (lambda (binding)
                                      (destructuring-bind (name value)
-                                         (first-two binding)
+                                         binding
                                        (list name (if (default-slot-p name)
                                                       `(if (getf initargs ,(alexandria:make-keyword name))
                                                            (slot-value instance ',name)
                                                            ,value)
-                                                      `(or (getf initargs ,(alexandria:make-keyword name)) ,value)))))))
+                                                      `(or (getf initargs ,(alexandria:make-keyword name)) ,value)))))
+				   bindings))
                     (declare (ignorable ,@(mapcar #'car *default-slots*)))
                     ,(make-window-parameter-setf)
                     ,(make-custom-slots-setf sketch-name (custom-bindings bindings)))
@@ -269,3 +267,9 @@ used for drawing, 60fps.")
              ,@body)))
 
        (find-class ',sketch-name))))
+
+(defmethod kit.sdl2:mousebutton-event :after ((instance sketch)
+                                              state timestamp button x y)
+  (with-slots (%env) instance
+    (when (env-red-screen %env)
+      (setf (env-debug-key-pressed %env) t))))

@@ -31,5 +31,4 @@
 	       (:file "resources")
 	       (:file "color")
                (:file "sketch")
-	       (:file "figures")
-	       (:file "controllers")))
+	       (:file "figures")))
