@@ -2,8 +2,6 @@
 
 (in-package #:sketch)
 
-;;; "sketch" goes here. Hacks and glory await!
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                                                  ;;;
@@ -178,9 +176,6 @@ used for drawing, 60fps.")
 
 ;;; DEFSKETCH helpers
 
-(defun first-two (list)
-  (list (first list) (second list)))
-
 (defun default-slot-p (slot-or-binding)
   (let ((defaults (mapcar #'car *default-slots*)))
     (typecase slot-or-binding
@@ -205,30 +200,6 @@ used for drawing, 60fps.")
   `(,(car binding)
      :initarg ,(alexandria:make-keyword (car binding))
      :accessor ,(binding-accessor sketch binding)))
-
-;;; DEFSKETCH channels
-
-(defun channel-binding-p (binding)
-  (and (consp (cadr binding)) (eql 'in (caadr binding))))
-
-(defun make-channel-observer (sketch binding)
-  `(define-channel-observer
-     (let ((win (kit.sdl2:last-window)))
-       (when win
-         (setf (,(binding-accessor sketch binding) win) ,(cadr binding))))))
-
-(defun make-channel-observers (sketch bindings)
-  (mapcar (lambda (binding)
-            (when (channel-binding-p binding)
-              (make-channel-observer sketch binding)))
-          bindings))
-
-(defun replace-channels-with-values (bindings)
-  (loop for binding in bindings
-     collect (list (car binding)
-                   (if (channel-binding-p binding)
-                       (caddr (cadr binding))
-                       (cadr binding)))))
 
 ;;; DEFSKETCH bindings
 
@@ -266,21 +237,19 @@ used for drawing, 60fps.")
          (defclass ,sketch-name (sketch)
            ,(sketch-bindings-to-slots `,sketch-name bindings)))
 
-       ,@(remove-if-not #'identity (make-channel-observers sketch-name bindings))
-
        (defmethod prepare progn ((instance ,sketch-name) &rest initargs &key &allow-other-keys)
                   (declare (ignorable initargs))
                   (let* (,@(loop for (slot . nil) in *default-slots*
                               collect (list slot `(slot-value instance ',slot)))
                          ,@(mapcar (lambda (binding)
                                      (destructuring-bind (name value)
-                                         (first-two binding)
+                                         binding
                                        (list name (if (default-slot-p name)
                                                       `(if (getf initargs ,(alexandria:make-keyword name))
                                                            (slot-value instance ',name)
                                                            ,value)
                                                       `(or (getf initargs ,(alexandria:make-keyword name)) ,value)))))
-                                   (replace-channels-with-values bindings)))
+				   bindings))
                     (declare (ignorable ,@(mapcar #'car *default-slots*)))
                     ,(make-window-parameter-setf)
                     ,(make-custom-slots-setf sketch-name (custom-bindings bindings)))
@@ -298,3 +267,9 @@ used for drawing, 60fps.")
              ,@body)))
 
        (find-class ',sketch-name))))
+
+(defmethod kit.sdl2:mousebutton-event :after ((instance sketch)
+                                              state timestamp button x y)
+  (with-slots (%env) instance
+    (when (env-red-screen %env)
+      (setf (env-debug-key-pressed %env) t))))

@@ -126,14 +126,6 @@
            :with-identity-matrix
            :with-current-matrix
 
-           ;; Channels
-           :register-input
-           :in
-           :out
-           :define-channel-observer
-           :define-named-channel-observer
-           :reset-all-channels
-
            ;; Figures
            :deffigure
 
