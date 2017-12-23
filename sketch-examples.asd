@@ -5,11 +5,12 @@
   :author "Danilo Vidovic (vydd)"
   :license "MIT"
   :depends-on (#:alexandria
-	       #:sketch)
+               #:sketch)
   :pathname "examples"
   :serial t
   :components ((:file "package")
-	       (:file "sinewave")
-	       (:file "life")
-	       (:file "brownian")
-	       (:file "hello-world")))
+               (:file "sinewave")
+               (:file "life")
+               (:file "brownian")
+               (:file "hello-world")
+               ))
