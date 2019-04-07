@@ -466,29 +466,26 @@ but may be considered unique for all practical purposes."
       (error (format nil "~a's type cannot be deduced." filename))
       (error (format nil "Unsupported resource type ~a" type))))
 
-#+nil ;;;;FIXME::renable with opticl and vecto/zpb-ttf
-(progn
+(defun make-image-from-surface (surface)
+  (let ((texture (car (gl:gen-textures 1)))
+	(width (sketch-util::opticl-loaded-surface-width surface))
+	(height (sketch-util::opticl-loaded-surface-height surface)))
+    (gl:bind-texture :texture-2d texture)
+    (gl:tex-parameter :texture-2d :texture-min-filter :linear)
+    (gl:tex-image-2d :texture-2d 0 :rgba
+		     width
+		     height
+		     0
+		     :rgba
+		     :unsigned-byte (sketch-util::opticl-loaded-surface-data surface))
+    (gl:bind-texture :texture-2d 0)
+    (make-instance 'image
+		   :width width
+		   :height height
+		   :texture texture)))
 
-  (defun make-image-from-surface (surface)
-    (let ((texture (car (gl:gen-textures 1))))
-      (gl:bind-texture :texture-2d texture)
-      (gl:tex-parameter :texture-2d :texture-min-filter :linear)
-      (gl:tex-image-2d :texture-2d 0 :rgba
-		       (sdl2:surface-width surface)
-		       (sdl2:surface-height surface)
-		       0
-		       :bgra
-		       :unsigned-byte (sdl2:surface-pixels surface))
-      (gl:bind-texture :texture-2d 0)
-      (let ((image (make-instance 'image
-				  :width (sdl2:surface-width surface)
-				  :height (sdl2:surface-height surface)
-				  :texture texture)))
-	(sdl2:free-surface surface)
-	image)))
-
-  (defmethod load-typed-resource (filename (type (eql :image)) &key &allow-other-keys)
-    (make-image-from-surface (sdl2-image:load-image filename))))
+(defmethod load-typed-resource (filename (type (eql :image)) &key &allow-other-keys)
+  (make-image-from-surface (sketch-util::make-opticl-data filename)))
 #+nil ;;FIXME::fix with vecto/zpb-ttf
 (defmethod load-typed-resource (filename (type (eql :typeface))
 				&key (size 18) &allow-other-keys)

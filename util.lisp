@@ -30,8 +30,6 @@
    width
    height))
 
-(defparameter *test* (sketch-util::opticl-load-image "/home/imac/Pictures/Blank+_5852f2f085f3a33a2a14eda1a11fb6f0.png"))
-
 (defun convert (opticl-data)
   (let ((dimensions (array-dimensions opticl-data))
 	(type (array-element-type opticl-data)))
@@ -115,12 +113,29 @@
 					  (4 #'dump-pixels-4))))
 		  (dotimes (w width)
 		    (dotimes (h height)
-		      (multiple-value-bind (r b g a) (funcall dump-pixels-fun w h)
-			(let ((base (+ w (* width h))))
+		      (multiple-value-bind (r g b a) (funcall dump-pixels-fun w h)
+			(let ((base (* 4 (+ h (* height w)))))
 			  (setf (aref new (+ base 0)) r
 				(aref new (+ base 1)) g
 				(aref new (+ base 2)) b
-				(aref new (+ base 3)) a))))))))))))))
+				(aref new (+ base 3)) a))))))))))
+	(values
+	 new
+	 width
+	 height)))))
+
+(defparameter *path* (merge-pathnames
+		      "res/lenna.png"
+		      (asdf:system-source-directory :sketch)))
+(defparameter *test* nil;;(sketch-util::opticl-load-image *path*)
+  )
+(defun make-opticl-data (&optional (path *path*))
+  (multiple-value-bind (data width height)
+      (convert (opticl-load-image path))
+    (make-opticl-loaded-surface
+     :data data
+     :width width
+     :height height)))
 
 ;;a -> a a a 1.0 or a a a a?
 ;;ra -> r r r a

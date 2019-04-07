@@ -5,5 +5,6 @@
   (:export :brownian
 	   :hello-world
 	   :life
-	   :sinewave))
+	   :sinewave
+	   :lenna))
 
