@@ -1,0 +1,25 @@
+(defpackage :sketch-util
+  (:use :cl))
+(in-package :sketch-util)
+
+(defun file-name-extension (name)
+  ;; taken from dto's xelf code
+  (let ((pos (position #\. name :from-end t)))
+    (when (numberp pos)
+      (subseq name (1+ pos)))))
+
+(defun opticl-load-image (file)
+  (let ((extension (file-name-extension file)))
+    (cond ((string= extension "png")
+	   (opticl:read-png-file file))
+	  ((string= extension "jpeg")
+	   (opticl:read-jpeg-file file))
+	  ((string= extension "tiff")
+	   (opticl:read-tiff-file file))
+	  ((string= extension "pnm")
+	   (opticl:read-pnm-file file))
+	  ((string= extension "pbm")
+	   (opticl:read-pbm-file file))
+	  ((string= extension "gif")
+	   (opticl:read-gif-file file))
+	  (t (error "unsupported file format ~s ~s" extension file)))))

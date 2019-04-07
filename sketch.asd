@@ -9,9 +9,11 @@
                #:glkit
                #:mathkit
                #:md5
-               #:sdl2-image
-               #:sdl2-ttf
+               ;;#:sdl2-image
+               ;;#:sdl2-ttf
+	       #:opticl
                #:sdl2kit
                #:split-sequence
                #:static-vectors)
-  :components ((:file "dump")))
+  :components ((:file "util")
+	       (:file "dump")))
