@@ -14,23 +14,4 @@
                #:sdl2kit
                #:split-sequence
                #:static-vectors)
-  :pathname "src"
-  :serial t
-  :components ((:file "package")
-               (:file "math")
-               (:file "utils")
-               (:file "environment")
-               (:file "resources")
-               (:file "color")
-               (:file "channels")
-               (:file "shaders")
-               (:file "pen")
-               (:file "image")
-               (:file "font")
-               (:file "geometry")
-               (:file "drawing")
-               (:file "shapes")
-               (:file "transforms")
-               (:file "sketch")
-               (:file "figures")
-               (:file "controllers")))
+  :components ((:file "dump")))
