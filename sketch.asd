@@ -11,6 +11,7 @@
                #:md5
                ;;#:sdl2-image
                ;;#:sdl2-ttf
+	       #:uncommon-lisp
 	       #:opticl
                #:sdl2kit
                #:split-sequence
