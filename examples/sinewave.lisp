@@ -12,7 +12,7 @@
     ((title "Sinewave") (width 400) (height 400)
      (steps 0) (xs (/ width 5)) (r 3))
   (incf steps)
-  (background (rgb 0.2 0.2 0.2))
+  ;;(background (rgb 0.2 0.2 0.2))
   (let ((w width) (h height))
     (flet ((sin-calc (x)
 	     (sin (* +tau+ (/ (+ (/ steps 4) x) xs)))))

@@ -6,7 +6,7 @@
 
 (uiop:define-package #:sketch
     (:use #:cl)
-  #+nil
+  #+nil ;;FIXME
   (:import-from :kit.sdl2
                 :mousebutton-event
                 :mousemotion-event
@@ -371,16 +371,17 @@ but may be considered unique for all practical purposes."
 
 (defun initialize-gl (w)
   (with-slots ((env %env) width height) w
-    (sdl2:gl-set-swap-interval 1)
-    (setf (kit.sdl2:idle-render w) t)
+    ;;(sdl2:gl-set-swap-interval 1) ;;FIXME::remove  -> vsync?
+    ;;(setf (kit.sdl2:idle-render w) t) ;;FIXME::remove
     (gl:viewport 0 0 width height)
     (gl:enable :blend :line-smooth :polygon-smooth)
     (gl:blend-func :src-alpha :one-minus-src-alpha)
     (gl:hint :line-smooth-hint :nicest)
     (gl:hint :polygon-smooth-hint :nicest)
     (gl:clear-color 0.0 1.0 0.0 1.0)
-    (gl:clear :color-buffer :depth-buffer)
-    (gl:flush)))
+    ;;(gl:clear :color-buffer :depth-buffer)
+    ;;(gl:flush) ;;FIXME::why is this here?
+    ))
 
 (defun debug-mode-p ()
   (and (env-red-screen *env*)
@@ -712,125 +713,126 @@ but may be considered unique for all practical purposes."
 ;;;  \____|_| |_/_/   \_\_| \_|_| \_|_____|_____|____/
 
 ;;; Channel interface
+#+nil;;FIXME::what are channels?
+(progn
+  (defparameter *channels* (make-hash-table))
 
-(defparameter *channels* (make-hash-table))
+  (defun register-input (channel &optional initial (adapter #'identity))
+    (unless (assoc adapter (gethash channel *channels*))
+      (push (cons adapter initial) (gethash channel *channels*)))
+    t)
 
-(defun register-input (channel &optional initial (adapter #'identity))
-  (unless (assoc adapter (gethash channel *channels*))
-    (push (cons adapter initial) (gethash channel *channels*)))
-  t)
+  (defun in (channel &optional initial (adapter #'identity))
+    (register-input channel initial adapter)
+    (let ((a (cdr (assoc adapter (gethash channel *channels*)))))
+      (or a initial)))
 
-(defun in (channel &optional initial (adapter #'identity))
-  (register-input channel initial adapter)
-  (let ((a (cdr (assoc adapter (gethash channel *channels*)))))
-    (or a initial)))
+  (defun out-1 (channel message)
+    (register-input channel message #'identity)
+    (mapcar (lambda (adapter-value-cons)
+	      (setf (cdr adapter-value-cons)
+		    (funcall (car adapter-value-cons) message)))
+	    (gethash channel *channels*))
+    (propagate channel))
 
-(defun out-1 (channel message)
-  (register-input channel message #'identity)
-  (mapcar (lambda (adapter-value-cons)
-            (setf (cdr adapter-value-cons)
-                  (funcall (car adapter-value-cons) message)))
-          (gethash channel *channels*))
-  (propagate channel))
+  (defun out (&rest channel-message)
+    (mapcar (lambda (x) (out-1 (first x) (second x)))
+	    (group channel-message))
+    (values))
 
-(defun out (&rest channel-message)
-  (mapcar (lambda (x) (out-1 (first x) (second x)))
-          (group channel-message))
-  (values))
+  ;;; Channel propagation
 
-;;; Channel propagation
+  (defstruct propagation
+    name
+    inputs
+    outputs
+    function)
 
-(defstruct propagation
-  name
-  inputs
-  outputs
-  function)
+  (defparameter *propagations* (make-hash-table))
+  (defparameter *channel-propagations* (make-hash-table))
 
-(defparameter *propagations* (make-hash-table))
-(defparameter *channel-propagations* (make-hash-table))
+  (defun propagate (channel)
+    (mapcar (lambda (p) (funcall (propagation-function p)))
+	    (gethash channel *channel-propagations*)))
 
-(defun propagate (channel)
-  (mapcar (lambda (p) (funcall (propagation-function p)))
-          (gethash channel *channel-propagations*)))
+  (defun find-inputs-and-outputs (body)
+    (let ((flat-body (alexandria:flatten body))
+	  (inputs-and-outputs (list (list 'in) (list 'out)))
+	  (push-into nil))
+      (dolist (token flat-body)
+	(alexandria:if-let ((io-cons (assoc push-into inputs-and-outputs)))
+	  (progn
+	    (when (not (member token (cdr io-cons)))
+	      (setf (cdr io-cons) (cons token (cdr io-cons))))
+	    (setf push-into nil))
+	  (setf push-into token)))
+      inputs-and-outputs))
 
-(defun find-inputs-and-outputs (body)
-  (let ((flat-body (alexandria:flatten body))
-        (inputs-and-outputs (list (list 'in) (list 'out)))
-        (push-into nil))
-    (dolist (token flat-body)
-      (alexandria:if-let ((io-cons (assoc push-into inputs-and-outputs)))
-        (progn
-          (when (not (member token (cdr io-cons)))
-            (setf (cdr io-cons) (cons token (cdr io-cons))))
-          (setf push-into nil))
-        (setf push-into token)))
-    inputs-and-outputs))
+  (defun extract-input-registration (body)
+    (mapcar (lambda (in-form) (cadr in-form))
+	    (remove-if #'atom (flatten body (lambda (x) (eql (car x) 'in))))))
 
-(defun extract-input-registration (body)
-  (mapcar (lambda (in-form) (cadr in-form))
-          (remove-if #'atom (flatten body (lambda (x) (eql (car x) 'in))))))
+  (defun delete-channel-propagation (channel propagation)
+    (setf (gethash channel *channel-propagations*)
+	  (remove-if (lambda (x) (eql x propagation))
+		     (gethash channel *channel-propagations*))))
 
-(defun delete-channel-propagation (channel propagation)
-  (setf (gethash channel *channel-propagations*)
-        (remove-if (lambda (x) (eql x propagation))
-                   (gethash channel *channel-propagations*))))
+  (defun update-propagation-data (name inputs outputs)
+    (let ((propagation (gethash name *propagations*)))
+      (if propagation
+	  (mapcar (lambda (channel)
+		    (delete-channel-propagation channel propagation))
+		  (propagation-inputs propagation))
+	  (setf propagation (make-propagation :name name)
+		(gethash name *propagations*) propagation))
+      (setf (propagation-inputs propagation) inputs
+	    (propagation-outputs propagation) outputs)
+      (mapcar (lambda (channel)
+		(push propagation (gethash channel *channel-propagations*)))
+	      inputs)))
 
-(defun update-propagation-data (name inputs outputs)
-  (let ((propagation (gethash name *propagations*)))
-    (if propagation
-        (mapcar (lambda (channel)
-                  (delete-channel-propagation channel propagation))
-                (propagation-inputs propagation))
-        (setf propagation (make-propagation :name name)
-              (gethash name *propagations*) propagation))
-    (setf (propagation-inputs propagation) inputs
-          (propagation-outputs propagation) outputs)
-    (mapcar (lambda (channel)
-              (push propagation (gethash channel *channel-propagations*)))
-            inputs)))
+  (defun %define-channel-observer (name body)
+    (let ((name (or name (gensym))))
+      (let* ((inputs-and-outputs (find-inputs-and-outputs body))
+	     (inputs (cdr (assoc 'in inputs-and-outputs)))
+	     (outputs (cdr (assoc 'out inputs-and-outputs)))
+	     (input-registrations (extract-input-registration body)))
+	(update-propagation-data name inputs outputs)
+	(mapcar #'register-input input-registrations)
+	(setf (propagation-function (gethash name *propagations*))
+	      (eval `(lambda () ,@body)))
+	(when outputs
+	  (mapcar #'propagate inputs)))))
 
-(defun %define-channel-observer (name body)
-  (let ((name (or name (gensym))))
-    (let* ((inputs-and-outputs (find-inputs-and-outputs body))
-           (inputs (cdr (assoc 'in inputs-and-outputs)))
-           (outputs (cdr (assoc 'out inputs-and-outputs)))
-           (input-registrations (extract-input-registration body)))
-      (update-propagation-data name inputs outputs)
-      (mapcar #'register-input input-registrations)
-      (setf (propagation-function (gethash name *propagations*))
-            (eval `(lambda () ,@body)))
-      (when outputs
-        (mapcar #'propagate inputs)))))
+  (defmacro define-named-channel-observer (name &body body)
+    (%define-channel-observer name body)
+    nil)
 
-(defmacro define-named-channel-observer (name &body body)
-  (%define-channel-observer name body)
-  nil)
+  (defmacro define-channel-observer (&body body)
+    (%define-channel-observer nil body)
+    nil)
 
-(defmacro define-channel-observer (&body body)
-  (%define-channel-observer nil body)
-  nil)
+  ;;; Utility functions
 
-;;; Utility functions
+  (defun reset-channel (channel)
+    (remhash channel *channels*)
+    (remhash channel *channel-propagations*)
+    (maphash (lambda (name propagation)
+	       (declare (ignore name))
+	       (setf (propagation-inputs propagation)
+		     (remove-if (lambda (x) (eql x channel))
+				(propagation-inputs propagation))
+		     (propagation-outputs propagation)
+		     (remove-if (lambda (x) (eql x channel))
+				(propagation-outputs propagation))))
+	     *propagations*)
+    (values))
 
-(defun reset-channel (channel)
-  (remhash channel *channels*)
-  (remhash channel *channel-propagations*)
-  (maphash (lambda (name propagation)
-             (declare (ignore name))
-             (setf (propagation-inputs propagation)
-                   (remove-if (lambda (x) (eql x channel))
-                              (propagation-inputs propagation))
-                   (propagation-outputs propagation)
-                   (remove-if (lambda (x) (eql x channel))
-                              (propagation-outputs propagation))))
-           *propagations*)
-  (values))
-
-(defun reset-all-channels ()
-  (setf *channels* (make-hash-table)
-        *propagations* (make-hash-table)
-        *channel-propagations* (make-hash-table))
-  (values))
+  (defun reset-all-channels ()
+    (setf *channels* (make-hash-table)
+	  *propagations* (make-hash-table)
+	  *channel-propagations* (make-hash-table))
+    (values)))
 
 
 ;;----------------------------------------------------------------------
@@ -1530,7 +1532,8 @@ void main() {
       (y-axis :initform :down :reader sketch-y-axis :initarg :y-axis))))
 
 (defmacro define-sketch-class ()
-  `(defclass sketch (kit.sdl2:gl-window)
+  `(defclass sketch (;kit.sdl2:gl-window;;FIXME
+		     )
      ((%env :initform (make-env))
       (%restart :initform t)
       ,@*default-slots*)))
@@ -1539,41 +1542,49 @@ void main() {
 
 ;;; Non trivial sketch writers
 
-(defmacro define-sketch-writer (slot &body body)
-  `(defmethod (setf ,(alexandria:symbolicate 'sketch- slot)) (value (instance sketch))
-     (setf (slot-value instance ',slot) value)
-     (let ((win (kit.sdl2:sdl-window instance)))
-       ,@body)))
 
-(defgeneric (setf sketch-title) (value instance))
-(defgeneric (setf sketch-width) (value instance))
-(defgeneric (setf sketch-height) (value instance))
-(defgeneric (setf sketch-fullscreen) (value instance))
-(defgeneric (setf sketch-y-axis) (value instance))
+(defgeneric (setf sketch-title) (value instance)
+  (:method (value instance)))
+(defgeneric (setf sketch-width) (value instance)
+  (:method (value instance)))
+(defgeneric (setf sketch-height) (value instance)
+  (:method (value instance)))
+(defgeneric (setf sketch-fullscreen) (value instance)
+  (:method (value instance)))
+(defgeneric (setf sketch-y-axis) (value instance)
+  (:method (value instance)))
 
-(define-sketch-writer title
-  (sdl2:set-window-title win (slot-value instance 'title)))
+#+nil;;FIXME
+(progn
+  (defmacro define-sketch-writer (slot &body body)
+    `(defmethod (setf ,(alexandria:symbolicate 'sketch- slot)) (value (instance sketch))
+       (setf (slot-value instance ',slot) value)
+       (let ((win (kit.sdl2:sdl-window instance)))
+	 ,@body)))
 
-(define-sketch-writer width
-  (sdl2:set-window-size win (slot-value instance 'width)
-                        (slot-value instance 'height)))
+  (define-sketch-writer title
+    (sdl2:set-window-title win (slot-value instance 'title)))
 
-(define-sketch-writer height
-  (sdl2:set-window-size win (slot-value instance 'width)
-                        (slot-value instance 'height)))
+  (define-sketch-writer width
+    (sdl2:set-window-size win (slot-value instance 'width)
+			  (slot-value instance 'height)))
 
-(define-sketch-writer fullscreen
-  (sdl2:set-window-fullscreen win (slot-value instance 'fullscreen)))
+  (define-sketch-writer height
+    (sdl2:set-window-size win (slot-value instance 'width)
+			  (slot-value instance 'height)))
 
-(define-sketch-writer y-axis
-  (declare (ignore win))
-  (with-slots ((env %env) width height y-axis) instance
-    (setf (env-view-matrix env)
-          (if (eq y-axis :down)
-              (kit.glm:ortho-matrix 0 width height 0 -1 1)
-              (kit.glm:ortho-matrix 0 width 0 height -1 1)))
-    (kit.gl.shader:uniform-matrix
-     (env-programs env) :view-m 4 (vector (env-view-matrix env)))))
+  (define-sketch-writer fullscreen
+    (sdl2:set-window-fullscreen win (slot-value instance 'fullscreen)))
+
+  (define-sketch-writer y-axis
+    (declare (ignore win))
+    (with-slots ((env %env) width height y-axis) instance
+      (setf (env-view-matrix env)
+	    (if (eq y-axis :down)
+		(kit.glm:ortho-matrix 0 width height 0 -1 1)
+		(kit.glm:ortho-matrix 0 width 0 height -1 1)))
+      (kit.gl.shader:uniform-matrix
+       (env-programs env) :view-m 4 (vector (env-view-matrix env))))))
 
 ;;; Generic functions
 
@@ -1597,9 +1608,11 @@ used for drawing, 60fps.")
 (defun initialize-sketch ()
   (unless *initialized*
     (setf *initialized* t)
+    #+nil;;FIXME
     (kit.sdl2:init)
     #+nil
     (sdl2-ttf:init) ;;;FIXME::reenable
+    #+nil;;FIXME
     (sdl2:in-main-thread ()
       (sdl2:gl-set-attr :multisamplebuffers 1)
       (sdl2:gl-set-attr :multisamplesamples 4)
@@ -1608,11 +1621,13 @@ used for drawing, 60fps.")
       (sdl2:gl-set-attr :context-minor-version 3)
       (sdl2:gl-set-attr :context-profile-mask 1))))
 
+#+nil
 (defmethod initialize-instance :around ((instance sketch) &key &allow-other-keys)
   (initialize-sketch)
   (call-next-method)
+  #+nil;;FIXME
   (kit.sdl2:start))
-
+#+nil
 (defmethod initialize-instance :after ((instance sketch) &rest initargs &key &allow-other-keys)
   (initialize-environment instance)
   (apply #'prepare (list* instance initargs))
@@ -1643,48 +1658,54 @@ used for drawing, 60fps.")
   (draw window)
   (end-draw))
 
+#+nil;;FIXME
 (defmethod kit.sdl2:render ((instance sketch))
+  (render-sketch-instance instance))
+(defun render-sketch-instance (instance)  
   (with-slots (%env %restart width height copy-pixels) instance
     (with-environment %env
       (with-pen (make-default-pen)
-        (with-font (make-default-font)
-          (with-identity-matrix
-            (unless copy-pixels
-              (background (gray 0.4)))
-            ;; Restart sketch on setup and when recovering from an error.
-            (when %restart
-              (gl-catch (rgb 1 1 0.3)
-                (setup instance))
-              (setf (slot-value instance '%restart) nil))
-            ;; If we're in the debug mode, we exit from it immediately,
-            ;; so that the restarts are shown only once. Afterwards, we
-            ;; continue presenting the user with the red screen, waiting for
-            ;; the error to be fixed, or for the debug key to be pressed again.
-            (if (debug-mode-p)
-                (progn
-                  (exit-debug-mode)
-                  (draw-window instance))
-                (gl-catch (rgb 0.7 0 0)
-                  (draw-window instance)))))))))
+	(with-font (make-default-font)
+	  (with-identity-matrix
+	    #+nil;;FIXME -> for integration with other opengl apps
+	    (unless copy-pixels
+	      (background (gray 0.4)))
+	    ;; Restart sketch on setup and when recovering from an error.
+	    (when %restart
+	      (gl-catch (rgb 1 1 0.3)
+		(setup instance))
+	      (setf (slot-value instance '%restart) nil))
+	    ;; If we're in the debug mode, we exit from it immediately,
+	    ;; so that the restarts are shown only once. Afterwards, we
+	    ;; continue presenting the user with the red screen, waiting for
+	    ;; the error to be fixed, or for the debug key to be pressed again.
+	    (if (debug-mode-p)
+		(progn
+		  (exit-debug-mode)
+		  (draw-window instance))
+		(gl-catch (rgb 0.7 0 0)
+		  (draw-window instance)))))))))
 
 ;;; Default events
 
-(defmethod kit.sdl2:keyboard-event :before ((instance sketch) state timestamp repeatp keysym)
-  (declare (ignorable timestamp repeatp))
-  (when (and (eql state :keydown)
-             (sdl2:scancode= (sdl2:scancode-value keysym) :scancode-escape))
-    (kit.sdl2:close-window instance)))
+#+nil;;FIXME
+(progn
+  (defmethod kit.sdl2:keyboard-event :before ((instance sketch) state timestamp repeatp keysym)
+	     (declare (ignorable timestamp repeatp))
+	     (when (and (eql state :keydown)
+			(sdl2:scancode= (sdl2:scancode-value keysym) :scancode-escape))
+	       (kit.sdl2:close-window instance)))
 
-(defmethod close-window :before ((instance sketch))
-  (with-environment (slot-value instance '%env)
-    (loop for resource being the hash-values of (env-resources *env*)
-       do (free-resource resource))))
+  (defmethod close-window :before ((instance sketch)) ;;FIXME::cleanup resources?
+	     (with-environment (slot-value instance '%env)
+	       (loop for resource being the hash-values of (env-resources *env*)
+		  do (free-resource resource))))
 
-(defmethod close-window :after ((instance sketch))
-  (when (and *build* (not (kit.sdl2:all-windows)))
-    #+nil
-    (sdl2-ttf:quit) ;;FIXME::reenable
-    (kit.sdl2:quit)))
+  (defmethod close-window :after ((instance sketch))
+	     (when (and *build* (not (kit.sdl2:all-windows)))
+	       #+nil
+	       (sdl2-ttf:quit) ;;FIXME::reenable
+	       (kit.sdl2:quit))))
 
 ;;; DEFSKETCH helpers
 
@@ -1717,28 +1738,29 @@ used for drawing, 60fps.")
      :accessor ,(binding-accessor sketch binding)))
 
 ;;; DEFSKETCH channels
+#+nil ;;FIXME::channels
+(progn
+  (defun channel-binding-p (binding)
+    (and (consp (cadr binding)) (eql 'in (caadr binding))))
 
-(defun channel-binding-p (binding)
-  (and (consp (cadr binding)) (eql 'in (caadr binding))))
+  (defun make-channel-observer (sketch binding)
+    `(define-channel-observer
+       (let ((win (kit.sdl2:last-window)))
+	 (when win
+	   (setf (,(binding-accessor sketch binding) win) ,(cadr binding))))))
 
-(defun make-channel-observer (sketch binding)
-  `(define-channel-observer
-     (let ((win (kit.sdl2:last-window)))
-       (when win
-         (setf (,(binding-accessor sketch binding) win) ,(cadr binding))))))
+  (defun make-channel-observers (sketch bindings)
+    (mapcar (lambda (binding)
+	      (when (channel-binding-p binding)
+		(make-channel-observer sketch binding)))
+	    bindings))
 
-(defun make-channel-observers (sketch bindings)
-  (mapcar (lambda (binding)
-            (when (channel-binding-p binding)
-              (make-channel-observer sketch binding)))
-          bindings))
-
-(defun replace-channels-with-values (bindings)
-  (loop for binding in bindings
-     collect (list (car binding)
-                   (if (channel-binding-p binding)
-                       (caddr (cadr binding))
-                       (cadr binding)))))
+  (defun replace-channels-with-values (bindings)
+    (loop for binding in bindings
+       collect (list (car binding)
+		     (if (channel-binding-p binding)
+			 (caddr (cadr binding))
+			 (cadr binding))))))
 
 ;;; DEFSKETCH bindings
 
@@ -1782,7 +1804,8 @@ used for drawing, 60fps.")
        (defclass ,sketch-name (sketch)
          ,(sketch-bindings-to-slots `,sketch-name bindings))
 
-       ,@(remove-if-not #'identity (make-channel-observers sketch-name bindings))
+       ;;FIXME::what are channels for?
+       ;;,@(remove-if-not #'identity (make-channel-observers sketch-name bindings))
 
        (defmethod prepare progn ((instance ,sketch-name) &rest initargs &key &allow-other-keys)
                   (declare (ignorable initargs))
@@ -1796,7 +1819,9 @@ used for drawing, 60fps.")
                                                            (slot-value instance ',name)
                                                            ,value)
                                                       `(or (getf initargs ,(alexandria:make-keyword name)) ,value)))))
-                                   (replace-channels-with-values bindings)))
+                                   ;;(replace-channels-with-values bindings) ;;FIXME::what is channel for?
+				   bindings
+				   ))
                     (declare (ignorable ,@(mapcar #'car *default-slots*) ,@(custom-slots bindings)))
                     ,(make-window-parameter-setf)
                     ,(make-custom-slots-setf sketch-name (custom-bindings bindings)))
@@ -1880,30 +1905,32 @@ used for drawing, 60fps.")
 ;;;  \____\___/|_| \_| |_| |_| \_\\___/|_____|_____|_____|_| \_\____/
 
 ;;; Mouse
+#+nil ;;FIXME
+(progn
+  (defmethod kit.sdl2:mousemotion-event :after ((instance sketch)
+						timestamp button-mask x y xrel yrel)
+	     (out :mouse (cons x y)
+		  :mouse-x x
+		  :mouse-y y
+		  :mouse-rel (cons xrel yrel)
+		  :mouse-xrel xrel
+		  :mouse-yrel yrel))
 
-(defmethod kit.sdl2:mousemotion-event :after ((instance sketch)
-                                              timestamp button-mask x y xrel yrel)
-  (out :mouse (cons x y)
-       :mouse-x x
-       :mouse-y y
-       :mouse-rel (cons xrel yrel)
-       :mouse-xrel xrel
-       :mouse-yrel yrel))
+  (defmethod kit.sdl2:mousewheel-event :after ((instance sketch)
+					       timestamp x y)
+	     (out :mouse-wheel (cons x y)
+		  :mouse-wheel-x x
+		  :mouse-wheel-y y))
 
-(defmethod kit.sdl2:mousewheel-event :after ((instance sketch)
-                                             timestamp x y)
-  (out :mouse-wheel (cons x y)
-       :mouse-wheel-x x
-       :mouse-wheel-y y))
-
-(defmethod kit.sdl2:mousebutton-event :after ((instance sketch)
-                                              state timestamp button x y)
-  (with-slots (%env) instance
-    (when (env-red-screen %env)
-      (setf (env-debug-key-pressed %env) t))))
+  (defmethod kit.sdl2:mousebutton-event :after ((instance sketch)
+						state timestamp button x y)
+	     (with-slots (%env) instance
+	       (when (env-red-screen %env)
+		 (setf (env-debug-key-pressed %env) t)))))
 
 ;;; Keyboard
-
-(defmethod keyboard-event :after ((instance sketch)
-                                  state timestamp repeatp keysym))
+#+nil ;;FIXME
+(progn
+  (defmethod keyboard-event :after ((instance sketch)
+				    state timestamp repeatp keysym)))
 

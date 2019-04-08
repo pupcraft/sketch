@@ -171,3 +171,4 @@
 	   :data (zpng:image-data (vecto-data))
 	   :width width
 	   :height height))))))
+
