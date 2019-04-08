@@ -15,6 +15,7 @@
 	       #:opticl
                #:sdl2kit
                #:split-sequence
-               #:static-vectors)
+               #:static-vectors
+	       #:vecto)
   :components ((:file "util")
 	       (:file "dump")))
