@@ -352,28 +352,39 @@ but may be considered unique for all practical purposes."
     (gl:tex-image-2d :texture-2d 0 :rgba 1 1 0 :bgra :unsigned-byte #(255 255 255 255))
     texture))
 
-(defun initialize-environment (w)
+(defun set-ortho-matrix (w)
   (with-slots ((env %env) width height y-axis) w
-    (setf (env-programs env) (kit.gl.shader:compile-shader-dictionary 'sketch-programs)
-          (env-view-matrix env) (if (eq y-axis :down)
-                                    (kit.glm:ortho-matrix 0 width height 0 -1 1)
-                                    (kit.glm:ortho-matrix 0 width 0 height -1 1))
+    (setf (env-view-matrix env) (if (eq y-axis :down)
+				    (kit.glm:ortho-matrix 0 width height 0 -1 1)
+				    (kit.glm:ortho-matrix 0 width 0 height -1 1)))))
+(defun set-shader-values (w)
+  (with-slots ((env %env) width height y-axis) w
+    (let ((program (sketch::env-programs env)))
+      (kit.gl.shader:use-program program :fill-shader)
+      (kit.gl.shader:uniformi program "texid" 0)
+      (glhelp::set-active-texture 0)
+      (kit.gl.shader:uniform-matrix
+       program :view-m 4 (vector (env-view-matrix env))))))
+
+(defun initialize-environment (w)
+  (set-ortho-matrix w)
+  (with-slots ((env %env) width height y-axis) w
+    (setf (env-programs env) (kit.gl.shader:compile-shader-dictionary 'sketch-programs)          
           (env-y-axis-sgn env) (if (eq y-axis :down) +1 -1)
           (env-vao env) (make-instance 'kit.gl.vao:vao :type 'sketch-vao)
           (env-white-pixel-texture env) (make-white-pixel-texture)
           (env-white-color-vector env) #(255 255 255 255)
           (env-pen env) (make-default-pen)
           (env-font env) (make-default-font) ;;FIXME::reenable font
-	  )
-    (kit.gl.shader:use-program (env-programs env) :fill-shader)
-    (kit.gl.shader:uniform-matrix
-     (env-programs env) :view-m 4 (vector (env-view-matrix env)))))
+	  ))
+  (set-shader-values w))
 
 (defun initialize-gl (w)
   (with-slots ((env %env) width height) w
     ;;(sdl2:gl-set-swap-interval 1) ;;FIXME::remove  -> vsync?
     ;;(setf (kit.sdl2:idle-render w) t) ;;FIXME::remove
     (gl:viewport 0 0 width height)
+    (gl:scissor 0 0 width height)
     (gl:enable :blend :line-smooth :polygon-smooth)
     (gl:blend-func :src-alpha :one-minus-src-alpha)
     (gl:hint :line-smooth-hint :nicest)
@@ -1544,15 +1555,20 @@ void main() {
 
 
 (defgeneric (setf sketch-title) (value instance)
-  (:method (value instance)))
+  (:method (value instance)
+    (setf (slot-value instance 'title) value)))
 (defgeneric (setf sketch-width) (value instance)
-  (:method (value instance)))
+  (:method (value instance)
+    (setf (slot-value instance 'width) value)))
 (defgeneric (setf sketch-height) (value instance)
-  (:method (value instance)))
+  (:method (value instance)
+    (setf (slot-value instance 'height) value)))
 (defgeneric (setf sketch-fullscreen) (value instance)
-  (:method (value instance)))
+  (:method (value instance)
+    (setf (slot-value instance 'fullscreen) value)))
 (defgeneric (setf sketch-y-axis) (value instance)
-  (:method (value instance)))
+  (:method (value instance)
+    (setf (slot-value instance 'y-axis) value)))
 
 #+nil;;FIXME
 (progn
