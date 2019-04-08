@@ -359,7 +359,7 @@ but may be considered unique for all practical purposes."
 				    (kit.glm:ortho-matrix 0 width 0 height -1 1)))))
 (defun set-shader-values (w)
   (with-slots ((env %env) width height y-axis) w
-    (let ((program (sketch::env-programs env)))
+    (let ((program (env-programs env)))
       (kit.gl.shader:use-program program :fill-shader)
       (kit.gl.shader:uniformi program "texid" 0)
       (glhelp::set-active-texture 0)
