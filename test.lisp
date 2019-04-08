@@ -1,5 +1,8 @@
-(defparameter *dir* (merge-pathnames "src/" (asdf:system-source-directory :sketch)))
+(defparameter *dir*
+  ;;(merge-pathnames "src/" (asdf:system-source-directory :sketch))
+  (merge-pathnames "examples/" (asdf:system-source-directory :sketch)))
 (defparameter *files*
+  #+nil
   '((:file "package")
     (:file "math")
     (:file "utils")
@@ -17,7 +20,14 @@
     (:file "transforms")
     (:file "sketch")
     (:file "figures")
-    (:file "controllers")))
+    (:file "controllers"))
+  '((:file "package")
+    (:file "sinewave")
+    (:file "life")
+    (:file "brownian")
+    (:file "hello-world")
+    (:file "lenna")
+    ))
 (defparameter *newline* (format nil "~%"))
 (defun concatenate-files ()
   (apply 'concatenate 'string

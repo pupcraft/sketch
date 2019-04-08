@@ -6,12 +6,5 @@
   :license "MIT"
   :depends-on (#:alexandria
                #:sketch)
-  :pathname "examples"
   :serial t
-  :components ((:file "package")
-               (:file "sinewave")
-               (:file "life")
-               (:file "brownian")
-               (:file "hello-world")
-	       (:file "lenna")
-               ))
+  :components ((:file "examples")))

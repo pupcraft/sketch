@@ -11,9 +11,9 @@
                #:md5
 	       #:uncommon-lisp
 	       #:opticl
-               #:sdl2kit
                #:split-sequence
                #:static-vectors
+	       #:glhelp
 	       #:vecto)
   :components ((:file "util")
 	       (:file "dump")))
